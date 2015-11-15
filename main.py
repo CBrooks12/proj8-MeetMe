@@ -2,6 +2,7 @@ import flask
 from flask import render_template
 from flask import request
 from flask import url_for
+from flask import jsonify # For AJAX transactions
 import uuid
 
 import json
@@ -264,7 +265,46 @@ def next_day(isotext):
 #  Functions (NOT pages) that return some information
 #
 ####
-  
+@app.route("/_getBusy")
+def setupBusy():
+    item_ids = request.args.get('objId')
+    app.logger.debug(item_ids)
+    app.logger.debug("Checking credentials for Google calendar access")
+    credentials = valid_credentials()
+    if not credentials:
+      app.logger.debug("Redirecting to authorization")
+      return flask.redirect(flask.url_for('oauth2callback'))
+
+    gcal_service = get_gcal_service(credentials)
+    app.logger.debug("Returned from get_gcal_service")
+    flask.session['busyTimes'] = getBusy(gcal_service,item_ids)
+    app.logger.debug(flask.session['busyTimes'])
+    #return flask.session['busyTimes']#render_template('index.html')
+    d = json.dumps(flask.session['busyTimes'])
+    return jsonify(result = d)
+def getBusy(service,item_ids):
+    #app.logger.debug(flask.session["begin_date"])
+    begin = flask.session["begin_date"]
+    end = flask.session["end_date"]
+    #item_ids = request.args.get('objId', 0, type=object)
+    #item_ids = request.args.getlist('objId')
+    #str1 =''.join(item_ids)
+    #app.logger.debug(item_ids)
+    calBusy = {
+        "timeMin" : begin,
+        "timeMax" : end,
+        "items":[
+          {
+           "id" :  item_ids#"4karenbrooks@gmail.com"
+          }
+        ] #data.objId
+        }
+    freebusyResponse = service.freebusy().query(body = calBusy)
+    busyRecords = freebusyResponse.execute()
+    #d = json.dumps(freebusyResponse)
+    return busyRecords
+    #return jsonify(result = d)
+    #return "hi"#freebusyResponse
 def list_calendars(service):
     """
     Given a google 'service' object, return a list of
@@ -289,7 +329,6 @@ def list_calendars(service):
         selected = ("selected" in cal) and cal["selected"]
         primary = ("primary" in cal) and cal["primary"]
         
-
         result.append(
           { "kind": kind,
             "id": id,
