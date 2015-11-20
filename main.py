@@ -287,6 +287,8 @@ def getBusy(service,item_ids):
     #app.logger.debug(flask.session["begin_date"])
     begin = flask.session["begin_date"]
     end = flask.session["end_date"]
+    if begin == end: 
+        end = arrow.get(end).replace(days=+1).isoformat()
     calBusyTimes = []
     for calendars in item_ids:
         app.logger.debug(calendars)
