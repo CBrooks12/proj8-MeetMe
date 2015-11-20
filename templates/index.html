@@ -107,41 +107,61 @@ $SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
 document.getElementById("calendars").addEventListener("click",function() {
     //alert("made it here");
     document.getElementById("result").innerHTML = "";
+    //console.log("@@@@@@@@@@@@@@");
     console.log($(this).serializeArray());
     var x = $(this).serializeArray();
-    //var arr = new Array();
+    var valToPass = [];
     for(var u = 0; u<x.length;u++)
     {
-	var valToPass = x[u].value;
-        console.log(valToPass);
-   	$.getJSON($SCRIPT_ROOT + '/_getBusy',
-   	// The object to pass to the server
-   	{ objId: valToPass },
+	valToPass[u] = x[u].value;
+    }
+    //var myJsonString = JSON.stringify(valToPass);
+    console.log(valToPass);
+    //var x = this;
+    //var arr = new Array();
+   	$.ajax({
+	url: $SCRIPT_ROOT + '/_getBusy',
+	type: "GET",
+	data: { ww: JSON.stringify(valToPass) },
    	// The function to call with the response
-   	function(data) {
+   	success: function(data) {
      	var times = data.result;
      	var obj = JSON.parse(times);
-     	var calendars = obj["calendars"];
+        console.log(obj);
+     	//var calendars = obj["calendars"];
         var arr = [];
-     	for(var keyA in calendars)  //gets calendar list
+	var listCount = 0;
+     	for(var keyA in obj)  //gets calendar list
      	{
-          	var busyTimeInner = calendars[keyA];
-          	busyTimeInner = busyTimeInner["busy"];
+          	var busyTimeInner = obj[keyA];
+                console.log(busyTimeInner);
+          	busyTimeInner = busyTimeInner["calendars"];
+                console.log(busyTimeInner);
+		//busyTimeInner = busyTimeInner["busy"];
+		//console.log(busyTimeInner);
+		busyTimeInner = busyTimeInner[Object.keys(busyTimeInner)[0]];
+		console.log(busyTimeInner);
+		busyTimeInner = busyTimeInner["busy"];
+		console.log(busyTimeInner);
           	for(var q = 0; q < busyTimeInner.length ; q++)
           	{
+		   listCount++;
            	   var busyT = busyTimeInner[q];
                    console.log(busyT["start"].toString());
-             	   arr.push(q+": "+ busyT["start"] + "--" + busyT["end"]+"<br/>");
+             	   arr.push(listCount+": "+ busyT["start"] + "--" + busyT["end"]+"<br/>");
                    
           	}
-		   arr = arr.toString();
+		   
+     	}
+  arr = arr.toString();
   		   arr = arr.replace(/,/g,"");
  	           document.getElementById("result").innerHTML = document.getElementById("result").innerHTML+ arr;
-     	}
-  
-  	}); // End of the call to getJSON
+  	},
+	error: function (xhr, ajaxOptions, thrownError) {
+        alert(xhr.status);
+        alert(thrownError);
+        }}); // End of the call to getJSON
    //freebusyResponse = service.freebusy().query(body = calSearch)
-   }
   
 });
 </script>

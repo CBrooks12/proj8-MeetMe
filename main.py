@@ -267,7 +267,8 @@ def next_day(isotext):
 ####
 @app.route("/_getBusy")
 def setupBusy():
-    item_ids = request.args.get('objId')
+    item_ids = json.loads(request.args.get('ww'))
+    #item_ids = ["4karenbrooks@gmail.com"];
     app.logger.debug(item_ids)
     app.logger.debug("Checking credentials for Google calendar access")
     credentials = valid_credentials()
@@ -278,7 +279,7 @@ def setupBusy():
     gcal_service = get_gcal_service(credentials)
     app.logger.debug("Returned from get_gcal_service")
     flask.session['busyTimes'] = getBusy(gcal_service,item_ids)
-    app.logger.debug(flask.session['busyTimes'])
+    #app.logger.debug(flask.session['busyTimes'])
     #return flask.session['busyTimes']#render_template('index.html')
     d = json.dumps(flask.session['busyTimes'])
     return jsonify(result = d)
@@ -286,24 +287,25 @@ def getBusy(service,item_ids):
     #app.logger.debug(flask.session["begin_date"])
     begin = flask.session["begin_date"]
     end = flask.session["end_date"]
-    #item_ids = request.args.get('objId', 0, type=object)
-    #item_ids = request.args.getlist('objId')
-    #str1 =''.join(item_ids)
-    #app.logger.debug(item_ids)
-    calBusy = {
+    calBusyTimes = []
+    for calendars in item_ids:
+        app.logger.debug(calendars)
+        calBusy = {
         "timeMin" : begin,
         "timeMax" : end,
         "items":[
           {
-           "id" :  item_ids#"4karenbrooks@gmail.com"
+           "id" :  calendars
           }
         ] #data.objId
         }
-    freebusyResponse = service.freebusy().query(body = calBusy)
-    busyRecords = freebusyResponse.execute()
-    #d = json.dumps(freebusyResponse)
-    return busyRecords
-    #return jsonify(result = d)
+        freebusyResponse = service.freebusy().query(body = calBusy)
+        busyRecords = freebusyResponse.execute()
+        #app.logger.debug(busyRecords)
+        calBusyTimes.append(busyRecords)
+    #d = json.dumps(calBusyTimes)
+    #return calBusyTimes
+    return calBusyTimes#jsonify(result = d)
     #return "hi"#freebusyResponse
 def list_calendars(service):
     """
