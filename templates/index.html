@@ -34,7 +34,7 @@
 <body>
 <div class="container">
 
-<h1>Busy times</h1>
+<h1>Free Times</h1>
 
 <!--
   -- If there are any warnings or other messages from a prior action,
@@ -54,13 +54,13 @@
 
 <h2>Date range</h2>
   <form action="/setrange" method="post">
-  <input type="text" name="daterange" size="12"
+  <input type="text" name="daterange" size="14"
     {% if session.daterange is defined %}
          value="{{session.daterange}}"
     {% endif %}
      class="pull-down"
      style="background: #fff; cursor: pointer; padding: 5px 10px;
-     border: 1px solid #ccc; width: 12em" >
+     border: 1px solid #ccc; width: 14em" >
   <script type="text/javascript">
   $(function() {
   $('input[name="daterange"]').daterangepicker(
@@ -89,10 +89,10 @@
     -->
 {% if session.calendars is defined  %}
 <div class="date/time col-xs-12">
-   <label class="col-xs-3">Starting time:</label>
-      <input class="col-md-2" id="startTime" placeholder="HH:MM">
-   <label class="col-xs-3">Ending time:</label>
-      <input class="col-md-2" id="endTime" placeholder="HH:MM">
+   <label class="col-xs-1">Starting time:</label>
+      <input class="col-md-1" id="startTime" placeholder="HH:MM"></br></br></br>
+   <label class="col-xs-1">Ending time:</label>
+      <input class="col-md-1" id="endTime" placeholder="HH:MM">
 </div>
   <h2>Calendars</h2>
 <!--onsubmit="getBusyCal()"-->
@@ -106,6 +106,7 @@
 {% endif %}
     
   <!--<p id="result"></p>-->
+    <h2>FreeTimes</h2>
   <ul id="JSONunorderedList">
 
 </ul> 
