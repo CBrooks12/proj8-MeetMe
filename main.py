@@ -280,11 +280,11 @@ def setupBusy():
     gcal_service = get_gcal_service(credentials)
     app.logger.debug("Returned from get_gcal_service")
     flask.session['busyTimes'] = getBusy(gcal_service,item_ids,startTime,endTime)
-    #app.logger.debug(flask.session['busyTimes'])
-    #return flask.session['busyTimes']#render_template('index.html')
     d = json.dumps(flask.session['busyTimes'])
     return jsonify(result = d)
 
+#api function to retrieve busy times from google.
+#retrieves array of calendars and interval of free time
 def getBusy(service,item_ids,startTime,endTime):
     #app.logger.debug(flask.session["begin_date"])
     begin = flask.session['begin_date']
@@ -309,16 +309,7 @@ def getBusy(service,item_ids,startTime,endTime):
         calBusyTimes.append(busyRecords)
         app.logger.debug(calBusyTimes)
     calDictDates = cal_date_parse(calBusyTimes,startTime,endTime)
-   # getFreeBusyTime = freeBusyTimeFinder(calDictDates)
-    #d = json.dumps(calBusyTimes)
-    #return calBusyTimes
-    return calDictDates#jsonify(result = d)
-    #return "hi"#freebusyResponse
-
-            
-
-
-
+    return calDictDates #returns list of free times with start/end over a certain period
 
 def cal_date_parse(calBusyTimes,startTime,endTime):
     #setup initial variables
@@ -327,18 +318,16 @@ def cal_date_parse(calBusyTimes,startTime,endTime):
     tempStartDate = arrow.get(flask.session["begin_date"])
     tempEndDate = arrow.get(flask.session["end_date"])
     freeBusyList = []
-    freeDateList = []
-    dateTimeObj = []
     timeListWithDate = []
     #loop through calendar list
     for calendars in calBusyTimes:
         app.logger.debug(calendars) #debug
-        tempOtherThing = calendars['calendars'] #get the calendar properties
-        app.logger.debug(tempOtherThing) #debug
-        tempBusyListThing = tempOtherThing[list(tempOtherThing)[0]] #get the elements in the abstract key for calendar
-        app.logger.debug(tempBusyListThing) #debug
+        calProperties = calendars['calendars'] #get the calendar properties
+        app.logger.debug(calProperties) #debug
+        tempList = calProperties[list(calProperties)[0]] #get the elements in the abstract key for calendar
+        app.logger.debug(tempList) #debug
 
-        for busyTimesPreSort in tempBusyListThing['busy']:
+        for busyTimesPreSort in tempList['busy']:
             app.logger.debug(busyTimesPreSort) #debug
             freeBusyList.append(busyTimesPreSort) #add the time to a localized list
     app.logger.debug(freeBusyList) #debug
@@ -349,10 +338,10 @@ def cal_date_parse(calBusyTimes,startTime,endTime):
     #increments the start date by 1 day until start time is greater than the end time
     #this is keeping track of the free/busy times over the duration of the day
     while tempStartDate.timestamp <= tempEndDate.timestamp:
-        startTime = startTimeHolder
-        endTime = endTimeHolder
+        startTime = startTimeHolder #holds the time of the start
+        endTime = endTimeHolder   #holds the time of the end
         start = tempStartDate  #stupid pointer for local loop
-        #start = start.replace(hour=0,minute=0) #initialize the start time of the day array
+        #initialize the start time of the day array
         tempString = start.format('YYYY-MM-DD') + " " + str(startTime)
         startTime = arrow.get(tempString, 'YYYY-MM-DD HH:mm')
         #app.logger.debug(startTime)
@@ -365,7 +354,7 @@ def cal_date_parse(calBusyTimes,startTime,endTime):
         #of the tempStartDate time day
         for busyTime in freeBusyList:
             busyTimeStart = arrow.get(busyTime["start"])
-            busyTimeStart = busyTimeStart.to('US/Pacific')
+            busyTimeStart = busyTimeStart.to('US/Pacific') #convert time to correct time zone
             busyTimeEnd = arrow.get(busyTime["end"])
             busyTimeEnd = busyTimeEnd.to('US/Pacific')
             #if the busy time is on the same day as the day we are making the list for
@@ -374,6 +363,7 @@ def cal_date_parse(calBusyTimes,startTime,endTime):
                 #if the busy times start time is before the temporary local pointer (lastest time of activity)
                 app.logger.debug(busyTimeStart.timestamp)
                 app.logger.debug(start.timestamp)
+                #if busy time starts after the current freetime, cut off free time and move to next open time
                 if busyTimeStart.timestamp>=start.timestamp:
                     end = busyTimeStart.format('HH:mm')
                     timeArr.append([start.format('HH:mm'),end])
@@ -384,12 +374,11 @@ def cal_date_parse(calBusyTimes,startTime,endTime):
                     start = busyTimeEnd
         if start.format('HH:mm') != endTime.format('HH:mm'):
             timeArr.append([start.format('HH:mm'),endTime.format('HH:mm')])
-            #dateTimeObj.append({"data":timeObj})
         #app.logger.debug(tempStartDate) #debug
         timeListWithDate.append({"date": tempStartDate.format('YYYY-MM-DD'), "data":timeArr})
         tempStartDate = tempStartDate.replace(days=+1)  #add day to localized time pointer (iterating to end date)
     app.logger.debug(timeListWithDate)
-    return timeListWithDate #returns list of free/busy times with start/end over a certain period
+    return timeListWithDate #returns list of free times with start/end over a certain period
 
 #sort function
 def byStart_key(time):
