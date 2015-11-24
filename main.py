@@ -7,7 +7,7 @@ import uuid
 
 import json
 import logging
-
+import operator
 # Date handling 
 import arrow # Replacement for datetime, based on moment.js
 import datetime # But we still need time
@@ -267,8 +267,9 @@ def next_day(isotext):
 ####
 @app.route("/_getBusy")
 def setupBusy():
-    item_ids = json.loads(request.args.get('ww'))
-    #item_ids = ["4karenbrooks@gmail.com"];
+    item_ids = json.loads(request.args.get('calData'))
+    startTime = request.args.get('start')
+    endTime = request.args.get('end')
     app.logger.debug(item_ids)
     app.logger.debug("Checking credentials for Google calendar access")
     credentials = valid_credentials()
@@ -278,15 +279,16 @@ def setupBusy():
 
     gcal_service = get_gcal_service(credentials)
     app.logger.debug("Returned from get_gcal_service")
-    flask.session['busyTimes'] = getBusy(gcal_service,item_ids)
+    flask.session['busyTimes'] = getBusy(gcal_service,item_ids,startTime,endTime)
     #app.logger.debug(flask.session['busyTimes'])
     #return flask.session['busyTimes']#render_template('index.html')
     d = json.dumps(flask.session['busyTimes'])
     return jsonify(result = d)
-def getBusy(service,item_ids):
+
+def getBusy(service,item_ids,startTime,endTime):
     #app.logger.debug(flask.session["begin_date"])
-    begin = flask.session["begin_date"]
-    end = flask.session["end_date"]
+    begin = flask.session['begin_date']
+    end = flask.session['end_date']
     if begin == end: 
         end = arrow.get(end).replace(days=+1).isoformat()
     calBusyTimes = []
@@ -305,10 +307,96 @@ def getBusy(service,item_ids):
         busyRecords = freebusyResponse.execute()
         #app.logger.debug(busyRecords)
         calBusyTimes.append(busyRecords)
+        app.logger.debug(calBusyTimes)
+    calDictDates = cal_date_parse(calBusyTimes,startTime,endTime)
+   # getFreeBusyTime = freeBusyTimeFinder(calDictDates)
     #d = json.dumps(calBusyTimes)
     #return calBusyTimes
-    return calBusyTimes#jsonify(result = d)
+    return calDictDates#jsonify(result = d)
     #return "hi"#freebusyResponse
+
+            
+
+
+
+
+def cal_date_parse(calBusyTimes,startTime,endTime):
+    #setup initial variables
+    startTimeHolder = startTime
+    endTimeHolder = endTime
+    tempStartDate = arrow.get(flask.session["begin_date"])
+    tempEndDate = arrow.get(flask.session["end_date"])
+    freeBusyList = []
+    freeDateList = []
+    dateTimeObj = []
+    timeListWithDate = []
+    #loop through calendar list
+    for calendars in calBusyTimes:
+        app.logger.debug(calendars) #debug
+        tempOtherThing = calendars['calendars'] #get the calendar properties
+        app.logger.debug(tempOtherThing) #debug
+        tempBusyListThing = tempOtherThing[list(tempOtherThing)[0]] #get the elements in the abstract key for calendar
+        app.logger.debug(tempBusyListThing) #debug
+
+        for busyTimesPreSort in tempBusyListThing['busy']:
+            app.logger.debug(busyTimesPreSort) #debug
+            freeBusyList.append(busyTimesPreSort) #add the time to a localized list
+    app.logger.debug(freeBusyList) #debug
+    #freeBusyList.sort(key=operator.attrgetter("start"), reverse=False)
+    freeBusyList = sorted(freeBusyList, key = byStart_key) #sort the localized list by earliest start times
+    app.logger.debug(freeBusyList) #debug
+
+    #increments the start date by 1 day until start time is greater than the end time
+    #this is keeping track of the free/busy times over the duration of the day
+    while tempStartDate.timestamp <= tempEndDate.timestamp:
+        startTime = startTimeHolder
+        endTime = endTimeHolder
+        start = tempStartDate  #stupid pointer for local loop
+        #start = start.replace(hour=0,minute=0) #initialize the start time of the day array
+        tempString = start.format('YYYY-MM-DD') + " " + str(startTime)
+        startTime = arrow.get(tempString, 'YYYY-MM-DD HH:mm')
+        #app.logger.debug(startTime)
+        start = startTime
+        tempString = start.format('YYYY-MM-DD') + " " + str(endTime)
+        endTime = arrow.get(tempString, 'YYYY-MM-DD HH:mm')
+        end = start
+        timeArr = []
+        #loop through busy times of our localized list and generate an array of all the free/busy times
+        #of the tempStartDate time day
+        for busyTime in freeBusyList:
+            busyTimeStart = arrow.get(busyTime["start"])
+            busyTimeStart = busyTimeStart.to('US/Pacific')
+            busyTimeEnd = arrow.get(busyTime["end"])
+            busyTimeEnd = busyTimeEnd.to('US/Pacific')
+            #if the busy time is on the same day as the day we are making the list for
+           
+            if busyTimeStart.format('YYYY-MM-DD') == tempStartDate.format('YYYY-MM-DD'):
+                #if the busy times start time is before the temporary local pointer (lastest time of activity)
+                app.logger.debug(busyTimeStart.timestamp)
+                app.logger.debug(start.timestamp)
+                if busyTimeStart.timestamp>=start.timestamp:
+                    end = busyTimeStart.format('HH:mm')
+                    timeArr.append([start.format('HH:mm'),end])
+                    app.logger.debug(timeArr)
+                    start = busyTimeEnd
+                #else, create a free time before creating the busy time
+                elif busyTimeEnd.timestamp >= start.timestamp:
+                    start = busyTimeEnd
+        if start.format('HH:mm') != endTime.format('HH:mm'):
+            timeArr.append([start.format('HH:mm'),endTime.format('HH:mm')])
+            #dateTimeObj.append({"data":timeObj})
+        #app.logger.debug(tempStartDate) #debug
+        timeListWithDate.append({"date": tempStartDate.format('YYYY-MM-DD'), "data":timeArr})
+        tempStartDate = tempStartDate.replace(days=+1)  #add day to localized time pointer (iterating to end date)
+    app.logger.debug(timeListWithDate)
+    return timeListWithDate #returns list of free/busy times with start/end over a certain period
+
+#sort function
+def byStart_key(time):
+    time = arrow.get(time["start"])
+    app.logger.debug(time)
+    return time.timestamp
+
 def list_calendars(service):
     """
     Given a google 'service' object, return a list of

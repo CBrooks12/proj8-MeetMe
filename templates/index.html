@@ -88,6 +88,12 @@
     prefer down then across). 
     -->
 {% if session.calendars is defined  %}
+<div class="date/time col-xs-12">
+   <label class="col-xs-3">Starting time:</label>
+      <input class="col-md-2" id="startTime" placeholder="HH:MM">
+   <label class="col-xs-3">Ending time:</label>
+      <input class="col-md-2" id="endTime" placeholder="HH:MM">
+</div>
   <h2>Calendars</h2>
 <!--onsubmit="getBusyCal()"-->
   <form  id="calendars" class="row">
@@ -99,15 +105,19 @@
   </form>
 {% endif %}
     
-  <p id="result"></p>
+  <!--<p id="result"></p>-->
+  <ul id="JSONunorderedList">
+
+</ul> 
   </div>  <!-- container (for bootstrap) -->
 <script>
 $SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
 //function getBusyCal() 
 document.getElementById("calendars").addEventListener("click",function() {
     //alert("made it here");
-    document.getElementById("result").innerHTML = "";
-    //console.log("@@@@@@@@@@@@@@");
+    document.getElementById("JSONunorderedList").innerHTML = "";
+    var startTimeCheck = document.getElementById("startTime").value;
+    var endTimeCheck = document.getElementById("endTime").value;
     console.log($(this).serializeArray());
     var x = $(this).serializeArray();
     var valToPass = [];
@@ -117,24 +127,38 @@ document.getElementById("calendars").addEventListener("click",function() {
     }
     //var myJsonString = JSON.stringify(valToPass);
     console.log(valToPass);
+    var timeMax;
+    var timeMin;
     //var x = this;
     //var arr = new Array();
    	$.ajax({
 	url: $SCRIPT_ROOT + '/_getBusy',
 	type: "GET",
-	data: { ww: JSON.stringify(valToPass) },
+	data: { calData: JSON.stringify(valToPass), start:startTimeCheck,end:endTimeCheck},
    	// The function to call with the response
    	success: function(data) {
+        
+	var listEl =document.getElementById('JSONunorderedList');
+        var times = data.result;
+     	var obj = JSON.parse(times);
+        console.log(obj);
+	makeList(obj,listEl);
+	},
+
+/*function(data) {
      	var times = data.result;
      	var obj = JSON.parse(times);
         console.log(obj);
      	//var calendars = obj["calendars"];
         var arr = [];
+	var calTimes = [];
 	var listCount = 0;
      	for(var keyA in obj)  //gets calendar list
      	{
           	var busyTimeInner = obj[keyA];
                 console.log(busyTimeInner);
+		timeMax = new Date(busyTimeInner["timeMax"]);
+		timeMin = new Date(busyTimeInner["timeMin"]);
           	busyTimeInner = busyTimeInner["calendars"];
                 console.log(busyTimeInner);
 		//busyTimeInner = busyTimeInner["busy"];
@@ -147,16 +171,25 @@ document.getElementById("calendars").addEventListener("click",function() {
           	{
 		   listCount++;
            	   var busyT = busyTimeInner[q];
-                   console.log(busyT["start"].toString());
+		   calTimes.push({start:new Date(busyT["start"]),end:new Date(busyT["end"])});
+                   console.log(calTimes);
              	   arr.push(listCount+": "+ busyT["start"] + "--" + busyT["end"]+"<br/>");
                    
           	}
 		   
      	}
+	calTimes.sort(function(a,b){
+		var tempA = a["start"].getTime();
+		var tempB = b["start"].getTime();
+		return tempA-tempB;
+	});
+	console.log(calTimes);
   arr = arr.toString();
   		   arr = arr.replace(/,/g,"");
  	           document.getElementById("result").innerHTML = document.getElementById("result").innerHTML+ arr;
-  	},
+  	}*/
+
+
 	error: function (xhr, ajaxOptions, thrownError) {
         alert(xhr.status);
         alert(thrownError);
@@ -164,5 +197,52 @@ document.getElementById("calendars").addEventListener("click",function() {
    //freebusyResponse = service.freebusy().query(body = calSearch)
   
 });
+
+
+function makeList( jsonObject, listElement){
+	var newLi = document.createElement("ul");
+        listElement.appendChild(newLi);
+	for(var i = 0; i<jsonObject.length;i++)
+	{
+		var listItem = document.createElement("li");
+		dateInfo = jsonObject[i];
+		listItem.innerHTML=dateInfo["date"];
+        	listElement.appendChild(listItem);
+		var innerTimes = document.createElement("ul");
+		listElement.appendChild(innerTimes);
+		var freeTimeInfo = dateInfo["data"];
+		for(var u = 0; u<freeTimeInfo.length; u++)
+		{
+			var alistItem = document.createElement("ul");
+			var timeData = "free time between " + freeTimeInfo[u][0] + " and " + freeTimeInfo[u][1];
+			alistItem.innerHTML=timeData;
+			listElement.appendChild(alistItem);
+		}
+        }
+
+    /*for(var i in jsonObject){//iterate through the array or object
+	//insert the next child into the list as a <li>
+	var newLI = document.createElement('li');
+	newLI.innerHTML=i["date"];
+        listElement.appendChild(newLI);
+	else if (  jsonObject[i] instanceof Object){
+	    newLI.innerHTML=i;
+	    newLI.className="arrayOrObject"; //add a class tag so we can style differently
+            continue;
+	}
+	else
+	    newLI.innerHTML=i+': '+jsonObject[i];
+	listElement.appendChild(newLI);   
+	//insert a <ul> for nested nodes 
+	if  (jsonObject[i] instanceof Array || jsonObject[i] instanceof Object){
+	    var newUL = document.createElement('ul');
+	    //newUL.innerHTML=i;
+	    listElement.appendChild(newUL);
+	    makeList(jsonObject[i],newUL);
+	}
+    }*/
+    
+}
+//	console.log(jsonObj);
 </script>
   </body> </html>
