@@ -4,7 +4,7 @@ from flask import request
 from flask import url_for
 from flask import jsonify # For AJAX transactions
 import uuid
-
+import sys
 import json
 import logging
 import operator
@@ -12,6 +12,12 @@ import operator
 import arrow # Replacement for datetime, based on moment.js
 import datetime # But we still need time
 from dateutil import tz  # For interpreting local times
+
+
+# Mongo database
+import pymongo
+from pymongo import MongoClient
+from bson.objectid import ObjectId
 
 
 # OAuth2  - Google library implementation for convenience
@@ -27,6 +33,19 @@ from apiclient import discovery
 import CONFIG
 app = flask.Flask(__name__)
 
+try: 
+    dbclient = MongoClient(CONFIG.MONGO_URL)
+    db = dbclient.busytimes
+    collection = db.dated
+
+except:
+    print("Failure opening database.  Is Mongo running? Correct password?")
+    sys.exit(1)
+
+import uuid
+app.secret_key = str(uuid.uuid4())
+
+
 SCOPES = 'https://www.googleapis.com/auth/calendar.readonly'
 CLIENT_SECRET_FILE = CONFIG.GOOGLE_LICENSE_KEY  ## You'll need this
 APPLICATION_NAME = 'MeetMe class project'
@@ -41,6 +60,7 @@ APPLICATION_NAME = 'MeetMe class project'
 @app.route("/index")
 def index():
   app.logger.debug("Entering index")
+  flask.session['key']=None
   if 'begin_date' not in flask.session:
     init_session_values()
   return render_template('index.html')
@@ -60,7 +80,31 @@ def choose():
     gcal_service = get_gcal_service(credentials)
     app.logger.debug("Returned from get_gcal_service")
     flask.session['calendars'] = list_calendars(gcal_service)
-    return render_template('index.html')
+    if flask.session.get('key') == None:
+        return render_template('index.html')
+    else:
+        return render_template('planner.html')
+
+
+@app.route("/planner")
+def planner():
+    app.logger.debug("Entering index")
+    if 'begin_date' not in flask.session:
+        init_session_values()
+    ##The long road
+    print("here we go")
+    if request.args.get('key'):
+        key = request.args.get('key')
+        flask.session['key'] = key
+        print("KEY ="+key)
+        for record in collection.find({"_id":ObjectId(key)}):
+        #flask.session['localDict'] = collection.findOne({"_id":ObjectId(key)})
+            print(record)
+    else:
+        print("no key")
+    #FINALLY RENDER PAGE
+    return set_range_planner()
+    #return render_template('planner.html')
 
 ####
 #
@@ -197,6 +241,25 @@ def setrange():
       flask.session['begin_date'], flask.session['end_date']))
     return flask.redirect(flask.url_for("choose"))
 
+def set_range_planner():
+    """
+    User chose a date range with the bootstrap daterange
+    widget.
+    """
+
+    for record in collection.find({"_id":ObjectId(flask.session.get('key'))}):
+        #flask.session['localDict'] = collection.findOne({"_id":ObjectId(key)})
+        tempRecordHolder = record['types']
+    print("tempRecordHolder")
+    #daterange = request.form.get('daterange')
+    #flask.session['daterange'] = daterange
+    #daterange_parts = daterange.split()
+    flask.session['begin_date'] = tempRecordHolder['startTime']
+    flask.session['end_date'] =  tempRecordHolder['endTime']
+    print("made it here")
+    return flask.redirect(flask.url_for("choose"))
+
+
 ####
 #
 #   Initialize session variables 
@@ -280,7 +343,8 @@ def setupBusy():
     gcal_service = get_gcal_service(credentials)
     app.logger.debug("Returned from get_gcal_service")
     flask.session['busyTimes'] = getBusy(gcal_service,item_ids,startTime,endTime)
-    d = json.dumps(flask.session['busyTimes'])
+    print(flask.session.get('busyTimes'))
+    d = json.dumps(flask.session.get('busyTimes'))	
     return jsonify(result = d)
 
 #api function to retrieve busy times from google.
@@ -309,7 +373,44 @@ def getBusy(service,item_ids,startTime,endTime):
         calBusyTimes.append(busyRecords)
         app.logger.debug(calBusyTimes)
     calDictDates = cal_date_parse(calBusyTimes,startTime,endTime)
-    return calDictDates #returns list of free times with start/end over a certain period
+    if flask.session.get('key') != None:
+        for record in collection.find({"_id":ObjectId(flask.session.get('key'))}):
+            tempRecordHolder = record['types']
+        calDictDates = combine_calendars(tempRecordHolder,calDictDates)
+        try:
+            #collection.remove({"_id": ObjectId(flask.session.get("key"))})
+            #print("deleted")
+            #collection.insert({"_id":ObjectId(flask.session.get("key")),"types":calDictDates})
+            #print(collection.find_one({"_id": ObjectId(flask.session.get("key"))}))
+            collection.update_one(
+            {"_id":ObjectId(flask.session.get("key"))},
+            {
+                "$set": { 
+                "types": calDictDates
+                }
+            })
+        except:
+        #e = sys.exc_info()[0]
+       #write_to_page( "<p>Error: %s</p>" % e )
+            print("broke you")
+            #print("broke you: {}".format(e))
+        d = {"core":calDictDates, "key":flask.session.get("key")}
+        print("checkhf")
+        return d
+    try:
+        collection.insert({"types":calDictDates})
+    except:
+        #e = sys.exc_info()[0]
+        #write_to_page( "<p>Error: %s</p>" % e )
+        print(" broke yo")
+    for record in collection.find({}):
+        try:
+            record['_id'] = str(record['_id'])
+        except:
+            del record['_id']
+        key = record['_id']
+    d = {"core":calDictDates, "key":key}
+    return d #returns list of free times with start/end over a certain period
 
 def cal_date_parse(calBusyTimes,startTime,endTime):
     #setup initial variables
@@ -319,35 +420,34 @@ def cal_date_parse(calBusyTimes,startTime,endTime):
     tempEndDate = arrow.get(flask.session["end_date"])
     freeBusyList = []
     timeListWithDate = []
+    finalDict = {"startTime":tempStartDate.isoformat(), "endTime":tempEndDate.isoformat(), "dates":None}
     #loop through calendar list
     for calendars in calBusyTimes:
-        app.logger.debug(calendars) #debug
         calProperties = calendars['calendars'] #get the calendar properties
-        app.logger.debug(calProperties) #debug
         tempList = calProperties[list(calProperties)[0]] #get the elements in the abstract key for calendar
-        app.logger.debug(tempList) #debug
 
         for busyTimesPreSort in tempList['busy']:
-            app.logger.debug(busyTimesPreSort) #debug
             freeBusyList.append(busyTimesPreSort) #add the time to a localized list
-    app.logger.debug(freeBusyList) #debug
     #freeBusyList.sort(key=operator.attrgetter("start"), reverse=False)
     freeBusyList = sorted(freeBusyList, key = byStart_key) #sort the localized list by earliest start times
-    app.logger.debug(freeBusyList) #debug
 
     #increments the start date by 1 day until start time is greater than the end time
     #this is keeping track of the free/busy times over the duration of the day
     while tempStartDate.timestamp <= tempEndDate.timestamp:
         startTime = startTimeHolder #holds the time of the start
-        endTime = endTimeHolder   #holds the time of the end
+        endTime = endTimeHolder   #holds the time of the endlocalDict
         start = tempStartDate  #stupid pointer for local loop
         #initialize the start time of the day array
         tempString = start.format('YYYY-MM-DD') + " " + str(startTime)
         startTime = arrow.get(tempString, 'YYYY-MM-DD HH:mm')
-        #app.logger.debug(startTime)
+        startTime = startTime.replace(hours=+8)
+        startTime = startTime.to('US/Pacific')
+        #app.logger.debug(startTime)localDict
         start = startTime
         tempString = start.format('YYYY-MM-DD') + " " + str(endTime)
         endTime = arrow.get(tempString, 'YYYY-MM-DD HH:mm')
+        endTime = endTime.replace(hours=+8)
+        endTime = endTime.to('US/Pacific')
         end = start
         timeArr = []
         #loop through busy times of our localized list and generate an array of all the free/busy times
@@ -361,24 +461,114 @@ def cal_date_parse(calBusyTimes,startTime,endTime):
            
             if busyTimeStart.format('YYYY-MM-DD') == tempStartDate.format('YYYY-MM-DD'):
                 #if the busy times start time is before the temporary local pointer (lastest time of activity)
-                app.logger.debug(busyTimeStart.timestamp)
-                app.logger.debug(start.timestamp)
+
                 #if busy time starts after the current freetime, cut off free time and move to next open time
-                if busyTimeStart.timestamp>=start.timestamp:
-                    end = busyTimeStart.format('HH:mm')
-                    timeArr.append([start.format('HH:mm'),end])
-                    app.logger.debug(timeArr)
-                    start = busyTimeEnd
+                if busyTimeStart.timestamp>=start.timestamp and busyTimeStart.timestamp<=endTime.timestamp:
+                    end = busyTimeStart
+                    timeArr.append([start.isoformat(),end.isoformat()])
+                    if busyTimeEnd.timestamp>endTime.timestamp:
+                        start = endTime
+                        break
+                    else:
+                        start = busyTimeEnd
                 #else, create a free time before creating the busy time
-                elif busyTimeEnd.timestamp >= start.timestamp:
+                elif busyTimeEnd.timestamp >= start.timestamp and busyTimeEnd.timestamp <= endTime.timestamp:
                     start = busyTimeEnd
-        if start.format('HH:mm') != endTime.format('HH:mm'):
-            timeArr.append([start.format('HH:mm'),endTime.format('HH:mm')])
+        if start.timestamp != endTime.timestamp:
+            #timeArr.append([start.format('HH:mm'),endTime.format('HH:mm')])
+            timeArr.append([start.isoformat(),endTime.isoformat()])
         #app.logger.debug(tempStartDate) #debug
-        timeListWithDate.append({"date": tempStartDate.format('YYYY-MM-DD'), "data":timeArr})
+        timeListWithDate.append({"date": tempStartDate.isoformat(), "data":timeArr})
         tempStartDate = tempStartDate.replace(days=+1)  #add day to localized time pointer (iterating to end date)
-    app.logger.debug(timeListWithDate)
-    return timeListWithDate #returns list of free times with start/end over a certain period
+    finalDict["dates"] = timeListWithDate
+    app.logger.debug(finalDict)
+    return finalDict #returns list of free times with start/end over a certain period
+
+
+def combine_calendars(calInit,calNew):
+    newDataList = []
+    tempInit = calInit['dates']
+    newDates = []
+    for timesInit in tempInit:
+        freeTimeInit = timesInit['data']
+        initDate = timesInit['date']
+        innerData = []
+        for timeLocal in freeTimeInit:         
+            tempNew = calNew['dates']
+            for timesNew in tempNew:
+                freeTimeNew = timesNew['data']
+                newDate = timesNew['date']
+                print(initDate)
+                initDate = arrow.get(initDate)
+                newDate = arrow.get(newDate)
+                #print(newDate)
+                print(initDate.format('YYYY-MM-DD')+ " == " + newDate.format('YYYY-MM-DD'))
+                if initDate.format('YYYY-MM-DD') != newDate.format('YYYY-MM-DD'):
+                    continue
+                for timeForeign in freeTimeNew:
+                    print(timeLocal)
+                    print(timeLocal[0])
+                    print(timeForeign)
+                    print(timeForeign[0])
+                    #timeForBeg = arrow.get('2015-12-03T09:00:00+00:00')
+                    timeForBeg = arrow.get(timeForeign[0])
+                    print("timeForBeg: " + str(timeForBeg))
+                    timeForBeg = timeForBeg.timestamp
+                    timeForEnd = arrow.get(timeForeign[1])
+                    timeForEnd = timeForEnd.timestamp
+                    timeLocBeg = arrow.get(timeLocal[0])
+                    timeLocBeg = timeLocBeg.timestamp
+                    timeLocEnd = arrow.get(timeLocal[1])
+                    timeLocEnd = timeLocEnd.timestamp
+                    print("wtf?")
+                    if timeForBeg <= timeLocBeg and timeLocBeg <= timeForEnd:
+                        tempNewStartFree = timeLocal[0]
+                    elif timeLocBeg <= timeForBeg and timeForBeg <= timeLocEnd:
+                        tempNewStartFree = timeForeign[0]
+                    else:
+                        continue
+                    startTempQuack = arrow.get(tempNewStartFree)
+                    startTempQuack = startTempQuack.timestamp
+                    if startTempQuack <= timeLocEnd and timeLocEnd <= timeForEnd:
+                         tempNewEndFree = timeLocal[1]
+                    else:
+                         tempNewEndFree = timeForeign[1]
+                    print("wtf")
+                    innerData.append([tempNewStartFree,tempNewEndFree])
+        newDates.append({ "date": initDate.isoformat(), "data":innerData })
+    finalDict = { "startTime":calInit['startTime'],"endTime":calInit['endTime'],"dates":newDates }
+    print("got here")
+    return finalDict
+
+@app.route("/_getMeeting")
+def meeting_entry_init(date,startTime,endTime):
+    startDate = arrow.get(flask.session["begin_date"])
+    endDate = arrow.get(flask.session["end_date"])
+    tempDate = arrow.get(date)
+    tempDateStart = tempDate.replace(hour=0, minute=0)
+    tempDateStart = tempDateStart.isoformat()
+    tempDateEnd = tempDate.replace(hour=23, minute=59)
+    tempDateEnd = tempDateEnd.isoformat()
+    tempDict = { "startTime":startDate,"endTime":endDate,"dates":[{"date":date,"data":[[tempDateStart,startTime],[endTime,tempDateEnd]]}]}
+    for record in collection.find({"_id":ObjectId(flask.session.get('key'))}):
+        tempRecordHolder = record['types']
+   # collection.remove({"_id": ObjectId(flask.session["key"])});
+   # collection.insert({_id:flask.session["key"],"types":finalDict})
+    try:
+        collection.update_one(
+            {"_id":ObjectId(flask.session.get("key"))},
+            {
+                "$set": { 
+                "types": finalDict
+                }
+            })
+    except:
+        #e = sys.exc_info()[0]
+       #write_to_page( "<p>Error: %s</p>" % e )
+        print("broke you")
+    d = {"core":finalDict, "key":flask.session.get("key")}
+    d = json.dumps(d)	
+    return jsonify(result = d)
 
 #sort function
 def byStart_key(time):
