@@ -98,8 +98,14 @@ def planner():
         flask.session['key'] = key
         print("KEY ="+key)
         for record in collection.find({"_id":ObjectId(key)}):
-        #flask.session['localDict'] = collection.findOne({"_id":ObjectId(key)})
             print(record)
+            tempRec = record
+        tempRec = tempRec['types']
+        try:
+            flask.session['begin_date'] = tempRec['startTime']
+            flask.session['end_date'] = tempRec['endTime']
+        except:
+            print("flask session was not created")
     else:
         print("no key")
     #FINALLY RENDER PAGE
@@ -378,10 +384,6 @@ def getBusy(service,item_ids,startTime,endTime):
             tempRecordHolder = record['types']
         calDictDates = combine_calendars(tempRecordHolder,calDictDates)
         try:
-            #collection.remove({"_id": ObjectId(flask.session.get("key"))})
-            #print("deleted")
-            #collection.insert({"_id":ObjectId(flask.session.get("key")),"types":calDictDates})
-            #print(collection.find_one({"_id": ObjectId(flask.session.get("key"))}))
             collection.update_one(
             {"_id":ObjectId(flask.session.get("key"))},
             {
@@ -416,21 +418,32 @@ def cal_date_parse(calBusyTimes,startTime,endTime):
     #setup initial variables
     startTimeHolder = startTime
     endTimeHolder = endTime
+    print(endTimeHolder)
+    print("we in cal_date")
     tempStartDate = arrow.get(flask.session["begin_date"])
     tempEndDate = arrow.get(flask.session["end_date"])
+    print("what about here?")
     freeBusyList = []
     timeListWithDate = []
     finalDict = {"startTime":tempStartDate.isoformat(), "endTime":tempEndDate.isoformat(), "dates":None}
+    print("made the finalDict")
     #loop through calendar list
     for calendars in calBusyTimes:
         calProperties = calendars['calendars'] #get the calendar properties
-        tempList = calProperties[list(calProperties)[0]] #get the elements in the abstract key for calendar
-
+        try:
+            tempList = calProperties[list(calProperties)[0]] #get the elements in the abstract key for calendar
+            print("this worked")
+        except:
+            print("we broke the thing")
+            tempList = calProperties['fakekey']
         for busyTimesPreSort in tempList['busy']:
             freeBusyList.append(busyTimesPreSort) #add the time to a localized list
     #freeBusyList.sort(key=operator.attrgetter("start"), reverse=False)
-    freeBusyList = sorted(freeBusyList, key = byStart_key) #sort the localized list by earliest start times
-
+    try:
+        freeBusyList = sorted(freeBusyList, key = byStart_key) #sort the localized list by earliest start times
+        print("we sorted out bro")
+    except:
+        print("we didnt sort")
     #increments the start date by 1 day until start time is greater than the end time
     #this is keeping track of the free/busy times over the duration of the day
     while tempStartDate.timestamp <= tempEndDate.timestamp:
@@ -484,6 +497,33 @@ def cal_date_parse(calBusyTimes,startTime,endTime):
     app.logger.debug(finalDict)
     return finalDict #returns list of free times with start/end over a certain period
 
+def fake_busy_meeting_create(date,start,end):
+    date = arrow.get(date)
+    print("check a:")
+    print(date)
+    tempString = date.format('YYYY-MM-DD') + " " + str(start)
+    startTime = arrow.get(tempString, 'YYYY-MM-DD HH:mm')
+    startTime = startTime.replace(hours=+8)
+    startTime = startTime.to('US/Pacific')
+    tempString = date.format('YYYY-MM-DD') + " " + str(end)
+    endTime = arrow.get(tempString, 'YYYY-MM-DD HH:mm')
+    endTime = endTime.replace(hours=+8)
+    endTime = endTime.to('US/Pacific')
+    print("check4")
+    fakeDict = {
+               "calendars": {
+               "fakekey":{
+               "busy": [
+               {
+                       "start": startTime.isoformat(),
+                        "end": endTime.isoformat()
+               }
+                       ]
+               }
+               }
+    }
+    print("check5")
+    return fakeDict
 
 def combine_calendars(calInit,calNew):
     newDataList = []
@@ -533,27 +573,51 @@ def combine_calendars(calInit,calNew):
                          tempNewEndFree = timeLocal[1]
                     else:
                          tempNewEndFree = timeForeign[1]
-                    print("wtf")
-                    innerData.append([tempNewStartFree,tempNewEndFree])
+                    endTempQuack = arrow.get(tempNewEndFree)
+                    endTempQuack = endTempQuack.timestamp
+                    if startTempQuack == endTempQuack:
+                         print("quack")
+                    else:
+                         innerData.append([tempNewStartFree,tempNewEndFree])
         newDates.append({ "date": initDate.isoformat(), "data":innerData })
     finalDict = { "startTime":calInit['startTime'],"endTime":calInit['endTime'],"dates":newDates }
     print("got here")
     return finalDict
+@app.route("/_delKey")
+def delKeyDict():
+    key = request.args.get('key')
+    try:
+        collection.remove({"_id":ObjectId(key)})
+        print("key deleted")
+    except:
+        print("key not deleted")
+    d = {"key":key}
+    d = json.dumps(d)	
+    return jsonify(result = d)
 
 @app.route("/_getMeeting")
-def meeting_entry_init(date,startTime,endTime):
-    startDate = arrow.get(flask.session["begin_date"])
-    endDate = arrow.get(flask.session["end_date"])
-    tempDate = arrow.get(date)
-    tempDateStart = tempDate.replace(hour=0, minute=0)
-    tempDateStart = tempDateStart.isoformat()
-    tempDateEnd = tempDate.replace(hour=23, minute=59)
-    tempDateEnd = tempDateEnd.isoformat()
-    tempDict = { "startTime":startDate,"endTime":endDate,"dates":[{"date":date,"data":[[tempDateStart,startTime],[endTime,tempDateEnd]]}]}
-    for record in collection.find({"_id":ObjectId(flask.session.get('key'))}):
-        tempRecordHolder = record['types']
-   # collection.remove({"_id": ObjectId(flask.session["key"])});
-   # collection.insert({_id:flask.session["key"],"types":finalDict})
+def meeting_entry_init():
+    date = request.args.get('date')
+    startTime = request.args.get('start')
+    endTime = request.args.get('end')
+    print("check1")
+    print(startTime)
+    print(endTime)
+    fakeDict = fake_busy_meeting_create(date,startTime,endTime)
+    print("check2")
+    tempStart = "00:00"
+    tempEnd = "23:59"
+    print(tempEnd)
+    print(flask.session["end_date"])
+    print(fakeDict)
+    tempfakeDictArr = []
+    tempfakeDictArr.append(fakeDict)
+    tempMeetDict = cal_date_parse(tempfakeDictArr,tempStart,tempEnd)
+    print("check3")
+    if flask.session.get('key') != None:
+        for record in collection.find({"_id":ObjectId(flask.session.get('key'))}):
+            tempRecordHolder = record['types']
+        finalDict = combine_calendars(tempRecordHolder,tempMeetDict)
     try:
         collection.update_one(
             {"_id":ObjectId(flask.session.get("key"))},
@@ -563,9 +627,7 @@ def meeting_entry_init(date,startTime,endTime):
                 }
             })
     except:
-        #e = sys.exc_info()[0]
-       #write_to_page( "<p>Error: %s</p>" % e )
-        print("broke you")
+        print("broke shit")
     d = {"core":finalDict, "key":flask.session.get("key")}
     d = json.dumps(d)	
     return jsonify(result = d)

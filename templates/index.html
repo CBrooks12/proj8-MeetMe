@@ -80,14 +80,20 @@
 
 <br /><input type="submit" value="Choose" />
 </form>
-
+  <h2>key delete</h2>
+  <div class="keydel">
+    <input class="keyDelete" placeholder="enter key here">
+    <button id="keydelbtn" value="Delete">Delete</button>
+  </div>
     <!--
     Show the calendar list (if we have it).  This will need to be turned into
     a form from which calendars can be picked. Up to three entries are
     shown in each row (but the order is across then down; I would
     prefer down then across). 
     -->
+</br></br>
 {% if session.calendars is defined  %}
+<h2>Set Times</h2>
 <div class="date/time col-xs-12">
    <label class="col-xs-1">Starting time:</label>
       <input class="col-md-1" id="startTime" placeholder="HH:MM"></br></br></br>
@@ -107,6 +113,7 @@
     
   <!--<p id="result"></p>-->
     <h2>FreeTimes</h2>
+    <p id="keynum"></p>
   <ul id="JSONunorderedList">
 
 </ul> 
@@ -114,8 +121,29 @@
 <script>
 $SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
 //function getBusyCal() 
+
+document.getElementById("keydelbtn").addEventListener("click",function() {
+    
+    var key = $(this).parents(".keydel").find(".keyDelete").val();
+    $.ajax({
+	url: $SCRIPT_ROOT + '/_delKey',
+	type: "GET",
+	data: { key:key},
+   	// The function to call with the response
+   	success: function(data) {
+        
+	alert("key deleted");
+	},
+
+
+	error: function (xhr, ajaxOptions, thrownError) {
+        alert(xhr.status);
+        alert(thrownError);
+        }}); // End of the call to getJSON
+
+});
 document.getElementById("calendars").addEventListener("click",function() {
-    //alert("made it here");
+
     document.getElementById("JSONunorderedList").innerHTML = "";
     var startTimeCheck = document.getElementById("startTime").value;
     var endTimeCheck = document.getElementById("endTime").value;
@@ -146,50 +174,6 @@ document.getElementById("calendars").addEventListener("click",function() {
 	makeList(obj,listEl);
 	},
 
-/*function(data) {
-     	var times = data.result;
-     	var obj = JSON.parse(times);
-        console.log(obj);
-     	//var calendars = obj["calendars"];
-        var arr = [];
-	var calTimes = [];
-	var listCount = 0;
-     	for(var keyA in obj)  //gets calendar list
-     	{
-          	var busyTimeInner = obj[keyA];
-                console.log(busyTimeInner);
-		timeMax = new Date(busyTimeInner["timeMax"]);
-		timeMin = new Date(busyTimeInner["timeMin"]);
-          	busyTimeInner = busyTimeInner["calendars"];
-                console.log(busyTimeInner);
-		//busyTimeInner = busyTimeInner["busy"];
-		//console.log(busyTimeInner);
-		busyTimeInner = busyTimeInner[Object.keys(busyTimeInner)[0]];
-		console.log(busyTimeInner);
-		busyTimeInner = busyTimeInner["busy"];
-		console.log(busyTimeInner);
-          	for(var q = 0; q < busyTimeInner.length ; q++)
-          	{
-		   listCount++;
-           	   var busyT = busyTimeInner[q];
-		   calTimes.push({start:new Date(busyT["start"]),end:new Date(busyT["end"])});
-                   console.log(calTimes);
-             	   arr.push(listCount+": "+ busyT["start"] + "--" + busyT["end"]+"<br/>");
-                   
-          	}
-		   
-     	}
-	calTimes.sort(function(a,b){
-		var tempA = a["start"].getTime();
-		var tempB = b["start"].getTime();
-		return tempA-tempB;
-	});
-	console.log(calTimes);
-  arr = arr.toString();
-  		   arr = arr.replace(/,/g,"");
- 	           document.getElementById("result").innerHTML = document.getElementById("result").innerHTML+ arr;
-  	}*/
-
 
 	error: function (xhr, ajaxOptions, thrownError) {
         alert(xhr.status);
@@ -202,6 +186,8 @@ document.getElementById("calendars").addEventListener("click",function() {
 
 function makeList( jsonObj, listElement){
         var jsonObjectTemp = jsonObj["core"];
+        var keyQuack = jsonObj["key"];
+        document.getElementById("keynum").innerHTML = "KEY: /planner?key="+keyQuack;
         var jsonObject = jsonObjectTemp["dates"];
 	var newLi = document.createElement("ul");
         listElement.appendChild(newLi);
@@ -222,28 +208,6 @@ function makeList( jsonObj, listElement){
 			listElement.appendChild(alistItem);
 		}
         }
-
-    /*for(var i in jsonObject){//iterate through the array or object
-	//insert the next child into the list as a <li>
-	var newLI = document.createElement('li');
-	newLI.innerHTML=i["date"];
-        listElement.appendChild(newLI);
-	else if (  jsonObject[i] instanceof Object){
-	    newLI.innerHTML=i;
-	    newLI.className="arrayOrObject"; //add a class tag so we can style differently
-            continue;
-	}
-	else
-	    newLI.innerHTML=i+': '+jsonObject[i];
-	listElement.appendChild(newLI);   
-	//insert a <ul> for nested nodes 
-	if  (jsonObject[i] instanceof Array || jsonObject[i] instanceof Object){
-	    var newUL = document.createElement('ul');
-	    //newUL.innerHTML=i;
-	    listElement.appendChild(newUL);
-	    makeList(jsonObject[i],newUL);
-	}
-    }*/
     
 }
 //	console.log(jsonObj);

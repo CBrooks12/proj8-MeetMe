@@ -78,9 +78,11 @@
     
   <!--<p id="result"></p>-->
     <h2>FreeTimes</h2>
-  <ul id="JSONunorderedList">
 
-</ul> 
+<form id="meetingTime">
+  <ul id="JSONunorderedList">
+  </ul> 
+</form>
   </div>  <!-- container (for bootstrap) -->
 <script>
 $SCRIPT_ROOT = {{ request.script_root|tojson|safe }};
@@ -115,52 +117,8 @@ document.getElementById("calendars").addEventListener("click",function() {
      	var obj = JSON.parse(times);
         console.log(obj);
 	makeList(obj,listEl);
+        loadElement();
 	},
-
-/*function(data) {
-     	var times = data.result;
-     	var obj = JSON.parse(times);
-        console.log(obj);
-     	//var calendars = obj["calendars"];
-        var arr = [];
-	var calTimes = [];
-	var listCount = 0;
-     	for(var keyA in obj)  //gets calendar list
-     	{
-          	var busyTimeInner = obj[keyA];
-                console.log(busyTimeInner);
-		timeMax = new Date(busyTimeInner["timeMax"]);
-		timeMin = new Date(busyTimeInner["timeMin"]);
-          	busyTimeInner = busyTimeInner["calendars"];
-                console.log(busyTimeInner);
-		//busyTimeInner = busyTimeInner["busy"];
-		//console.log(busyTimeInner);
-		busyTimeInner = busyTimeInner[Object.keys(busyTimeInner)[0]];
-		console.log(busyTimeInner);
-		busyTimeInner = busyTimeInner["busy"];
-		console.log(busyTimeInner);
-          	for(var q = 0; q < busyTimeInner.length ; q++)
-          	{
-		   listCount++;
-           	   var busyT = busyTimeInner[q];
-		   calTimes.push({start:new Date(busyT["start"]),end:new Date(busyT["end"])});
-                   console.log(calTimes);
-             	   arr.push(listCount+": "+ busyT["start"] + "--" + busyT["end"]+"<br/>");
-                   
-          	}
-		   
-     	}
-	calTimes.sort(function(a,b){
-		var tempA = a["start"].getTime();
-		var tempB = b["start"].getTime();
-		return tempA-tempB;
-	});
-	console.log(calTimes);
-  arr = arr.toString();
-  		   arr = arr.replace(/,/g,"");
- 	           document.getElementById("result").innerHTML = document.getElementById("result").innerHTML+ arr;
-  	}*/
-
 
 	error: function (xhr, ajaxOptions, thrownError) {
         alert(xhr.status);
@@ -175,6 +133,7 @@ function makeList( jsonObj, listElement){
         var jsonObjectTemp = jsonObj["core"];
         var jsonObject = jsonObjectTemp["dates"];
 	var newLi = document.createElement("ul");
+        //var arr = []
         listElement.appendChild(newLi);
 	for(var i = 0; i<jsonObject.length;i++)
 	{
@@ -188,35 +147,68 @@ function makeList( jsonObj, listElement){
 		for(var u = 0; u<freeTimeInfo.length; u++)
 		{
 			var alistItem = document.createElement("ul");
+                        var containDiv = document.createElement("div");
+                        containDiv.setAttribute('class','date');
 			var timeData = "free time between " + freeTimeInfo[u][0] + " and " + freeTimeInfo[u][1];
+                        var textboxStart = document.createElement('input');
+                        textboxStart.type = 'text';
+                        textboxStart.setAttribute('class','start');
+                        var textboxEnd = document.createElement('input');
+                        textboxEnd.type = 'text';
+                        textboxEnd.setAttribute('class','end');
 			alistItem.innerHTML=timeData;
+                        containDiv.appendChild(textboxStart);
+                        containDiv.appendChild(textboxEnd);
+                        var btn = document.createElement("BUTTON");                       // Create a <button> element
+                        btn.setAttribute('type','button');
+                        var t = document.createTextNode("submit Meeting proposal");       // Create a text node
+                        btn.setAttribute('id','submitMeet');
+                        btn.setAttribute('value', freeTimeInfo[u][0]);
+                        btn.appendChild(t); 
+                        containDiv.appendChild(btn);
 			listElement.appendChild(alistItem);
+                        listElement.appendChild(containDiv);
+                        //arr.push([FreeTimeInfo[0],freeTimeInfo[u][1]])
 		}
         }
-
-    /*for(var i in jsonObject){//iterate through the array or object
-	//insert the next child into the list as a <li>
-	var newLI = document.createElement('li');
-	newLI.innerHTML=i["date"];
-        listElement.appendChild(newLI);
-	else if (  jsonObject[i] instanceof Object){
-	    newLI.innerHTML=i;
-	    newLI.className="arrayOrObject"; //add a class tag so we can style differently
-            continue;
-	}
-	else
-	    newLI.innerHTML=i+': '+jsonObject[i];
-	listElement.appendChild(newLI);   
-	//insert a <ul> for nested nodes 
-	if  (jsonObject[i] instanceof Array || jsonObject[i] instanceof Object){
-	    var newUL = document.createElement('ul');
-	    //newUL.innerHTML=i;
-	    listElement.appendChild(newUL);
-	    makeList(jsonObject[i],newUL);
-	}
-    }*/
     
 }
-//	console.log(jsonObj);
+function loadElement(){
+document.getElementById("submitMeet").addEventListener("click",function() {
+     // $('button[id="submitMeet"]').click(function() {
+//document.getElementById("submitMeet").addEventListener("click",function() {
+    document.getElementById("JSONunorderedList").innerHTML = "";
+    var date = $(this).val();
+    var startTimeCheck = $(this).parents(".date").find(".start").val();
+    var endTimeCheck = $(this).parents(".date").find(".end").val();
+    console.log(date);
+    var timeMax;
+    var timeMin;
+   	$.ajax({
+	url: $SCRIPT_ROOT + '/_getMeeting',
+	type: "GET",
+	data: { data: date, start:startTimeCheck,end:endTimeCheck},
+   	// The function to call with the response
+   	success: function(data) {
+        alert("your meeting was posted as busy. Thanks!");
+	var listEl =document.getElementById('JSONunorderedList');
+        var times = data.result;
+     	var obj = JSON.parse(times);
+        console.log(obj);
+        
+	makeList(obj,listEl);
+	},
+
+
+
+	error: function (xhr, ajaxOptions, thrownError) {
+        alert(xhr.status);
+        alert(thrownError);
+        }}); // End of the call to getJSON
+   //freebusyResponse = service.freebusy().query(body = calSearch)
+  
+});
+}	
+
 </script>
   </body> </html>
