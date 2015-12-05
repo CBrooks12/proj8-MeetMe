@@ -1,5 +1,5 @@
-# proj7-FreeBusy
-Snarf appointment data from a selection of a user's Google calendars 
+# proj8-meetme
+set appointment data as busy from a selection of a user's Google calendars 
 
 ## What is here
 
@@ -31,6 +31,22 @@ iv: run program
 
 2:verify
 
-3:choose calendars and enter time in correct 24 hour format
+3:choose calendars and enter time in correct 24 hour format (only works in PST)
 
 4:auto updates with list of free times after clicking on calendars
+
+5:take generated key and place in URL
+
+6:select times in correct 24 hour format for second user
+
+7:select calendar
+
+8:auto updates with valid free times of combined calendars
+
+9:enter in meeting time
+
+10:press to confirm
+
+11:meeting time will be updated as busy
+
+you can also delete the key on the initial page if the creator wishes to
